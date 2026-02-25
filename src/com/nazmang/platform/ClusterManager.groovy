@@ -39,10 +39,11 @@ class ClusterManager {
 
                         } catch (err) {
 
+                            def reason = err.message ?: err.toString()
                             if (cfg.critical) {
-                                steps.error("Critical cluster ${c} failed.")
+                                steps.error("Deploy to ${c} failed: ${reason}")
                             } else {
-                                steps.echo("Non-critical cluster ${c} failed. Skipping.")
+                                steps.echo("Deploy to ${c} failed (non-critical): ${reason}. Skipping.")
                             }
                         }
                     }
