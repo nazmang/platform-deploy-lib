@@ -14,19 +14,22 @@ A Jenkins shared library for deploying Kubernetes workloads (Helm charts, raw ma
 ## Requirements
 
 - Jenkins with Pipeline support
-- Jenkins plugins: Pipeline, Pipeline: Groovy, (optional) Pipeline: Multibranch
-- A **deploy** container (or agent) with `kubectl` and `helm` available
+- Jenkins plugins:
+  - Pipeline, Pipeline: Groovy, (optional) Pipeline: Multibranch
+  - **[Helm Tool Plugin](https://github.com/nazmang/helm-tool-plugin)** — used by the `helm` step to install Helm charts (Global Tool for Helm binary + pipeline `helm` step)
+- A **deploy** container (or agent) with `kubectl` and `helm` available (or use the Helm installation provided by the Helm Tool Plugin)
 - Kubernetes kubeconfig credentials stored in Jenkins (e.g. `kubeconfig-hetzner`, `kubeconfig-onprem`)
 - For change detection: pipeline must have access to `currentBuild.changeSets` (e.g. polling or SCM trigger)
 
 ## Installation
 
-1. Clone or add this repository as a Jenkins **Shared Library** (e.g. named `platform-deploy-lib`).
-2. Configure the library in Jenkins: **Manage Jenkins → Configure System → Global Pipeline Libraries**:
+1. Install the [Helm Tool Plugin](https://github.com/nazmang/helm-tool-plugin) (when using the `helm` step): **Manage Jenkins → Plugins**, then in **Global Tool Configuration** add a Helm installation (e.g. install from URL or set `HELM_HOME`).
+2. Clone or add this repository as a Jenkins **Shared Library** (e.g. named `platform-deploy-lib`).
+3. Configure the library in Jenkins: **Manage Jenkins → Configure System → Global Pipeline Libraries**:
    - Name: `platform-deploy-lib`
    - Default version: branch or tag (e.g. `main`)
    - Load implicitly: optional (you can also use `@Library('platform-deploy-lib') _` in the Jenkinsfile)
-3. Ensure your Jenkinsfile runs inside a context where the **deploy** container and credentials are available (see [ClusterManager](#cluster-configuration) and example below).
+4. Ensure your Jenkinsfile runs inside a context where the **deploy** container and credentials are available (see [ClusterManager](#cluster-configuration) and example below).
 
 ## Repository layout
 
@@ -83,7 +86,7 @@ Each step is an object with:
 
 ### helm
 
-Deploys a Helm chart (uses the Jenkins Helm pipeline step under the hood).
+Deploys a Helm chart using the [Helm Tool Plugin](https://github.com/nazmang/helm-tool-plugin) for Jenkins (Global Tool + pipeline `helm` step). The plugin handles repository setup and `helm install` with the options you pass from `deploy.yaml`.
 
 **Config (under `config` or `environments.<env>.config`):**
 
