@@ -96,7 +96,14 @@ class YamlParser {
         if (s.startsWith('"') && s.endsWith('"')) return s.substring(1, s.length() - 1).replace('\\"', '"')
         if (s.startsWith("'") && s.endsWith("'")) return s.substring(1, s.length() - 1).replace("\\'", "'")
         if (s.isNumber()) return s.toLong()
-        if (s.contains('.') && s.replace('.', '').isNumber()) return s.toDouble()
+        // Try double only for single-dot decimals; version strings like 0.14.8 must stay as string
+        if (s.contains('.') && s.replace('.', '').isNumber()) {
+            try {
+                return s.toDouble()
+            } catch (NumberFormatException ignored) {
+                // e.g. "0.14.8" has multiple points
+            }
+        }
         return s
     }
 }
