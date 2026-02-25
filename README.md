@@ -1,0 +1,335 @@
+# Platform Deploy Library
+
+A Jenkins shared library for deploying Kubernetes workloads (Helm charts, raw manifests, Kustomize) to multiple environments (e.g. cloud, on-prem). Supports environment-specific config, optional steps per environment, and change-based or full deploy.
+
+## Features
+
+- **Multi-environment**: Deploy to several clusters in parallel or to a single target (cloud, on-prem, etc.).
+- **Declarative pipeline**: Each project is driven by a `deploy.yaml` in its directory.
+- **Step types**: Helm, manifest (kubectl apply), Kustomize, and wait (e.g. for CRDs).
+- **Environment-specific config**: Different Helm values or settings per environment.
+- **Conditional steps**: Run steps only in selected environments via `onlyEnvs`.
+- **Change detection**: Deploy only projects whose files changed (when not using `FORCE_DEPLOY` or `PROJECT`).
+
+## Requirements
+
+- Jenkins with Pipeline support
+- Jenkins plugins: Pipeline, Pipeline: Groovy, (optional) Pipeline: Multibranch
+- A **deploy** container (or agent) with `kubectl` and `helm` available
+- Kubernetes kubeconfig credentials stored in Jenkins (e.g. `kubeconfig-hetzner`, `kubeconfig-onprem`)
+- For change detection: pipeline must have access to `currentBuild.changeSets` (e.g. polling or SCM trigger)
+
+## Installation
+
+1. Clone or add this repository as a Jenkins **Shared Library** (e.g. named `platform-deploy-lib`).
+2. Configure the library in Jenkins: **Manage Jenkins → Configure System → Global Pipeline Libraries**:
+   - Name: `platform-deploy-lib`
+   - Default version: branch or tag (e.g. `main`)
+   - Load implicitly: optional (you can also use `@Library('platform-deploy-lib') _` in the Jenkinsfile)
+3. Ensure your Jenkinsfile runs inside a context where the **deploy** container and credentials are available (see [ClusterManager](#cluster-configuration) and example below).
+
+## Repository layout
+
+Your repo is expected to contain one or more **projects**, each in its own directory. Each project has a `deploy.yaml` and the files it references (values, manifests, etc.):
+
+```
+repository-root/
+├── Jenkinsfile
+├── project-a/
+│   ├── deploy.yaml
+│   ├── values-common.yaml
+│   ├── environments/
+│   │   ├── cloud/
+│   │   │   └── values.yaml
+│   │   └── onprem/
+│   │       └── values.yaml
+│   └── manifest.yaml
+└── project-b/
+    ├── deploy.yaml
+    └── ...
+```
+
+- **deploy.yaml**: Required. Defines the list of `steps` and their config (see below).
+- All paths in `deploy.yaml` (e.g. `file`, `values`, `overlay`) are **relative to the project directory**.
+
+---
+
+## deploy.yaml reference
+
+Top-level key:
+
+| Key    | Required | Description |
+|--------|----------|-------------|
+| `steps` | Yes     | List of step objects. Executed in order. |
+
+### Step structure
+
+Each step is an object with:
+
+| Key            | Required | Description |
+|----------------|----------|-------------|
+| `type`         | Yes      | One of: `helm`, `manifest`, `kustomize`, `wait`. |
+| `config`       | Conditional | Single config used for all environments. Use when the step is the same everywhere. |
+| `environments` | Conditional | Map of environment name → `{ config: { ... } }`. Use when config differs per environment (e.g. different Helm values per cluster). Exactly one of `config` or `environments` must be provided for the environments where the step runs. |
+| `onlyEnvs`     | No       | List of environment names. If set, the step runs **only** for those environments; otherwise it runs for the current environment (subject to having a valid `config`). |
+
+- If the step has **`environments`**, the config for the current cluster is `environments[<cluster>].config`. The cluster name comes from the pipeline (e.g. `cloud`, `onprem`).
+- If the step has **`config`** (no `environments`), that config is used for every cluster.
+- If **`onlyEnvs`** is set and the current cluster is not in the list, the step is skipped.
+
+---
+
+## Step types
+
+### helm
+
+Deploys a Helm chart (uses the Jenkins Helm pipeline step under the hood).
+
+**Config (under `config` or `environments.<env>.config`):**
+
+| Key           | Required | Description |
+|---------------|----------|-------------|
+| `repoName`    | Yes      | Helm repo name. |
+| `repoUrl`     | Yes      | Helm repo URL. |
+| `chartName`   | Yes      | Chart name (e.g. `repoName/chart-name`). |
+| `releaseName` | Yes      | Helm release name. |
+| `namespace`   | Yes      | Target namespace. |
+| `version`     | No       | Chart version. |
+| `values`      | No       | List of values files (paths relative to project dir). |
+
+**Example (environment-specific):**
+
+```yaml
+- type: helm
+  environments:
+    cloud:
+      config:
+        repoName: metallb
+        repoUrl: https://metallb.github.io/metallb
+        chartName: metallb/metallb
+        version: 0.14.8
+        releaseName: metallb
+        namespace: metallb-system
+        values:
+          - values-common.yaml
+          - environments/cloud/values.yaml
+    onprem:
+      config:
+        repoName: metallb
+        repoUrl: https://metallb.github.io/metallb
+        chartName: metallb/metallb
+        version: 0.14.8
+        releaseName: metallb
+        namespace: metallb-system
+        values:
+          - values-common.yaml
+          - environments/onprem/values.yaml
+```
+
+---
+
+### manifest
+
+Applies a Kubernetes manifest with `kubectl apply -f`.
+
+**Config:**
+
+| Key         | Required | Description |
+|-------------|----------|-------------|
+| `file`      | Yes      | Path to YAML manifest (relative to project dir). |
+| `namespace` | No       | If set, passed as `-n <namespace>` to `kubectl apply`. |
+
+**Example:**
+
+```yaml
+- type: manifest
+  config:
+    file: metallb-config.yaml
+    namespace: metallb-system
+```
+
+**Example (only in one environment):**
+
+```yaml
+- type: manifest
+  onlyEnvs:
+    - cloud
+  config:
+    file: something.yaml
+```
+
+---
+
+### kustomize
+
+Applies a Kustomize overlay with `kubectl apply -k`.
+
+**Config:**
+
+| Key       | Required | Description |
+|-----------|----------|-------------|
+| `overlay` | Yes      | Path to overlay directory (relative to project dir). |
+
+**Example:**
+
+```yaml
+- type: kustomize
+  config:
+    overlay: overlays/production
+```
+
+---
+
+### wait
+
+Waits for a resource to be ready (e.g. CRD established) before continuing.
+
+**Config:**
+
+| Key        | Required | Description |
+|------------|----------|-------------|
+| `kind`     | Yes      | Resource kind (e.g. `CustomResourceDefinition`). |
+| `name`     | Yes      | Resource name (e.g. CRD name like `ipaddresspools.metallb.io`). |
+| `timeout`  | No       | Timeout in seconds (default: 120). |
+| `namespace`| No       | For non-CRD resources, namespace for `kubectl wait`. |
+
+- For **CustomResourceDefinition**, the library runs:  
+  `kubectl wait --for=condition=established crd/<name> --timeout=<timeout>s`
+- For other kinds, it uses:  
+  `kubectl wait --for=condition=available <kind>/<name> --timeout=<timeout>s` (and `-n <namespace>` if set).
+
+**Example:**
+
+```yaml
+- type: wait
+  config:
+    kind: CustomResourceDefinition
+    name: ipaddresspools.metallb.io
+    timeout: 60
+```
+
+---
+
+## Pipeline parameters
+
+The library expects these parameters (define them in your Jenkins job or Jenkinsfile):
+
+| Parameter       | Description |
+|-----------------|-------------|
+| `CLUSTER`       | Target cluster name (e.g. `cloud`, `onprem`). Used when deploying to a single cluster. When `DEPLOY_TARGET=all`, the library uses the current parallel branch name instead. |
+| `DEPLOY_TARGET` | Set to `"all"` to deploy to all configured clusters in parallel. Otherwise deployment uses `CLUSTER` only. |
+| `PROJECT`       | Optional. If set, only this project (directory name) is deployed. |
+| `FORCE_DEPLOY`  | Optional. If set, all projects (all directories with a `deploy.yaml`) are deployed, ignoring change detection. |
+
+**Project selection (in order):**
+
+1. If `params.PROJECT` is non-empty → deploy only that project.
+2. Else if `params.FORCE_DEPLOY` is set → deploy all projects.
+3. Else → deploy only projects with changes (from `currentBuild.changeSets`).
+
+---
+
+## Cluster configuration
+
+Clusters are defined in `ClusterManager.groovy`:
+
+- **cloud**: credential `kubeconfig-hetzner`, critical (pipeline fails if this cluster fails).
+- **onprem**: credential `kubeconfig-onprem`, non-critical (failure is logged and skipped).
+
+The pipeline runs each target in a **deploy** container and injects the corresponding kubeconfig via `KUBECONFIG`. To add or change clusters, edit the `clusterMap` in `src/com/nazmang/platform/ClusterManager.groovy` and ensure the credential IDs exist in Jenkins.
+
+---
+
+## Example Jenkinsfile
+
+```groovy
+@Library('platform-deploy-lib') _
+
+pipeline {
+    agent none
+    parameters {
+        choice(name: 'DEPLOY_TARGET', choices: ['single', 'all'], description: 'Deploy to one cluster or all')
+        choice(name: 'CLUSTER', choices: ['cloud', 'onprem'], description: 'Target cluster (when DEPLOY_TARGET=single)')
+        string(name: 'PROJECT', defaultValue: '', description: 'Optional: deploy only this project (directory name)')
+        booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Deploy all projects, ignore changes')
+    }
+    stages {
+        stage('Deploy') {
+            steps {
+                platformDeploy()
+            }
+        }
+    }
+}
+```
+
+If your pipeline runs on an agent that already has a `deploy` container and credentials, no extra stage is needed. Otherwise, ensure the job runs in a context where `ClusterManager` can use `container('deploy')` and `withCredentials` as in the library.
+
+---
+
+## Full deploy.yaml example
+
+```yaml
+steps:
+  - type: helm
+    environments:
+      cloud:
+        config:
+          repoName: metallb
+          repoUrl: https://metallb.github.io/metallb
+          chartName: metallb/metallb
+          version: 0.14.8
+          releaseName: metallb
+          namespace: metallb-system
+          values:
+            - values-common.yaml
+            - environments/cloud/values.yaml
+      onprem:
+        config:
+          repoName: metallb
+          repoUrl: https://metallb.github.io/metallb
+          chartName: metallb/metallb
+          version: 0.14.8
+          releaseName: metallb
+          namespace: metallb-system
+          values:
+            - values-common.yaml
+            - environments/onprem/values.yaml
+
+  - type: wait
+    config:
+      kind: CustomResourceDefinition
+      name: ipaddresspools.metallb.io
+      timeout: 60
+
+  - type: manifest
+    config:
+      file: metallb-config.yaml
+      namespace: metallb-system
+
+  - type: manifest
+    onlyEnvs:
+      - cloud
+    config:
+      file: cloud-only.yaml
+```
+
+---
+
+## Library layout
+
+```
+platform-deploy-lib/
+├── README.md
+├── src/com/nazmang/platform/
+│   ├── ClusterManager.groovy   # Multi-cluster parallel execution, credentials
+│   ├── ProjectLoader.groovy    # Load deploy.yaml, discover project dirs
+│   └── ChangeDetector.groovy  # Changed projects from SCM change sets
+└── vars/
+    ├── platformDeploy.groovy   # Entry point: project selection + executeOnTargets
+    ├── deployProject.groovy   # Load spec, run steps (helm/manifest/kustomize/wait)
+    ├── helmDeploy.groovy
+    ├── manifestDeploy.groovy
+    ├── kustomizeDeploy.groovy
+    └── waitDeploy.groovy
+```
