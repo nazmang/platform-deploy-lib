@@ -19,10 +19,19 @@ def call(Map config = [:]) {
         return
     }
 
-    clusterManager.executeOnTargets { String clusterName ->
+    currentBuild.description = "Deploying: ${projects.join(', ')}"
+
+    clusterManager.executeOnTargets { clusterName ->
+
+        echo "Deploying to cluster: ${clusterName}"
 
         for (p in projects) {
-            deployProject(project: p, cluster: clusterName)
+
+            echo "---------------------------------------"
+            echo "Deploying project: ${p}"
+            echo "---------------------------------------"
+
+            deployProject(project: p)
         }
     }
 }
