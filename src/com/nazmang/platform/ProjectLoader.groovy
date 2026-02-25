@@ -10,8 +10,8 @@ class ProjectLoader {
 
     def load(String project) {
 
-        def yaml = steps.readYaml file: "${project}/deploy.yaml"
-        return yaml
+        def yamlText = steps.readFile file: "${project}/deploy.yaml", encoding: 'UTF-8'
+        return com.nazmang.platform.YamlParser.parse(yamlText)
     }
 
     def findAllProjects() {
