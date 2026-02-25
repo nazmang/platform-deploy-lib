@@ -1,7 +1,5 @@
 package com.nazmang.platform
 
-import groovy.yaml.YamlSlurper
-
 class ProjectLoader {
 
     def steps

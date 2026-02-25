@@ -27,8 +27,8 @@ A Jenkins shared library for deploying Kubernetes workloads (Helm charts, raw ma
 2. Clone or add this repository as a Jenkins **Shared Library** (e.g. named `platform-deploy-lib`).
 3. Configure the library in Jenkins: **Manage Jenkins → Configure System → Global Pipeline Libraries**:
    - Name: `platform-deploy-lib`
-   - Default version: branch or tag (e.g. `main`)
-   - Load implicitly: optional (you can also use `@Library('platform-deploy-lib') _` in the Jenkinsfile)
+   - **Default version:** set a branch or tag (e.g. `main`) so the library can be loaded; otherwise you must specify a version in the Jenkinsfile (see below).
+   - Load implicitly: optional (you can also use `@Library('platform-deploy-lib@main') _` in the Jenkinsfile)
 4. Ensure your Jenkinsfile runs inside a context where the **deploy** container and credentials are available (see [ClusterManager](#cluster-configuration) and example below).
 
 ## Repository layout
@@ -245,8 +245,10 @@ The pipeline runs each target in a **deploy** container and injects the correspo
 
 ## Example Jenkinsfile
 
+Specify the library **version** (branch or tag) when loading — either in the Jenkinsfile or as the library’s default in Jenkins. Example with branch `main`:
+
 ```groovy
-@Library('platform-deploy-lib') _
+@Library('platform-deploy-lib@main') _
 
 pipeline {
     agent none
@@ -265,6 +267,9 @@ pipeline {
     }
 }
 ```
+
+- Use `@Library('platform-deploy-lib@main')` for branch `main`, or `@Library('platform-deploy-lib@v1.0.0')` for a tag. If a **Default version** is set in the library configuration, `@Library('platform-deploy-lib')` (no version) will work.
+- If you see **"No version specified for library platform-deploy-lib"**, add a version: `@Library('platform-deploy-lib@main')` or set **Default version** in **Manage Jenkins → Global Pipeline Libraries** for this library.
 
 If your pipeline runs on an agent that already has a `deploy` container and credentials, no extra stage is needed. Otherwise, ensure the job runs in a context where `ClusterManager` can use `container('deploy')` and `withCredentials` as in the library.
 
