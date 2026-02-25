@@ -14,6 +14,9 @@ def call(Map config = [:]) {
         projects = changeDetector.detectChangedProjects()
     }
 
+    // Only deploy directories that contain deploy.yaml (skip top-level files like Jenkinsfile)
+    projects = projects.findAll { fileExists("${it}/deploy.yaml") }
+
     if (projects.isEmpty()) {
         echo "No projects to deploy."
         return
@@ -31,7 +34,7 @@ def call(Map config = [:]) {
             echo "Deploying project: ${p}"
             echo "---------------------------------------"
 
-            deployProject(project: p)
+            deployProject(project: p, cluster: clusterName)
         }
     }
 }
