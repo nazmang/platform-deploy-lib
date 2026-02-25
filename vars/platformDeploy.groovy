@@ -15,7 +15,13 @@ def call(Map config = [:]) {
     }
 
     // Only deploy directories that contain deploy.yaml (skip top-level files like Jenkinsfile)
-    projects = projects.findAll { fileExists("${it}/deploy.yaml") }
+    def filtered = []
+    for (p in projects) {
+        if (fileExists("${p}/deploy.yaml")) {
+            filtered.add(p)
+        }
+    }
+    projects = filtered
 
     if (projects.isEmpty()) {
         echo "No projects to deploy."
