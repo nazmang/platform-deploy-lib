@@ -35,7 +35,8 @@ pipeline {
                                     choice(name: 'PROJECT_SELECTED', choices: choices, description: 'Empty = use FORCE_DEPLOY or changed-only')
                                 ]
                             )
-                            env.PROJECT_SELECTED = result != null ? (result['PROJECT_SELECTED'] ?: '') : ''
+                            def selected = (result != null) ? result.toString() : ''
+                            env.setProperty('PROJECT_SELECTED', selected)
                         }
                     }
                 }
@@ -64,7 +65,7 @@ pipeline {
 
                             container('deploy') {
                                 unstash 'workspace'
-                                platformDeploy(projectOverride: env.PROJECT_SELECTED)
+                                platformDeploy(projectOverride: env.getProperty('PROJECT_SELECTED') ?: '')
                             }
                         }
                     }
