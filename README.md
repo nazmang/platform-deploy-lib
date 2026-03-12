@@ -86,19 +86,20 @@ Each step is an object with:
 
 ### helm
 
-Deploys a Helm chart using the [Helm Tool Plugin](https://github.com/nazmang/helm-tool-plugin) for Jenkins (Global Tool + pipeline `helm` step). The plugin handles repository setup and `helm install` with the options you pass from `deploy.yaml`.
+Deploys a Helm chart using the [Helm Tool Plugin](https://github.com/nazmang/helm-tool-plugin) for Jenkins (Global Tool + pipeline `helm` step). The plugin handles repository setup and `helm install` with the options you pass from `deploy.yaml`. The library maps your config to the plugin’s **chartPath**, **repositories**, **releaseName**, **valuesFile** (single file), **additionalArgs** (namespace, version, and multiple `-f` when you list more than one values file), and optional **helmInstallation**.
 
 **Config (under `config` or `environments.<env>.config`):**
 
-| Key           | Required | Description |
-|---------------|----------|-------------|
-| `repoName`    | Yes      | Helm repo name. |
-| `repoUrl`     | Yes      | Helm repo URL. |
-| `chartName`   | Yes      | Chart name (e.g. `repoName/chart-name`). |
-| `releaseName` | Yes      | Helm release name. |
-| `namespace`   | Yes      | Target namespace. |
-| `version`     | No       | Chart version. |
-| `values`      | No       | List of values files (paths relative to project dir). |
+| Key               | Required | Description |
+|-------------------|----------|-------------|
+| `repoName`        | Yes      | Helm repo name. |
+| `repoUrl`         | Yes      | Helm repo URL. |
+| `chartName`       | Yes      | Chart name (e.g. `repoName/chart-name` or `repo/chart`). |
+| `releaseName`     | Yes      | Helm release name. |
+| `namespace`       | Yes      | Target namespace. |
+| `version`         | No       | Chart version. |
+| `values`          | No       | List of values files (paths relative to project dir). One file is passed as the plugin’s `valuesFile`; multiple are passed as `-f` in additional arguments. |
+| `helmInstallation`| No       | Name of the Helm Global Tool installation to use (e.g. `helm-3.14`). Omit to use the plugin default. |
 
 **Example (environment-specific):**
 
