@@ -35,7 +35,7 @@ pipeline {
                                     choice(name: 'PROJECT_SELECTED', choices: choices, description: 'Empty = use FORCE_DEPLOY or changed-only')
                                 ]
                             )
-                            env.PROJECT_SELECTED = result?.PROJECT_SELECTED ?: ''
+                            env.PROJECT_SELECTED = result != null ? (result['PROJECT_SELECTED'] ?: '') : ''
                         }
                     }
                 }
