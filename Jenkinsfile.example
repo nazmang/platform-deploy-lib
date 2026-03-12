@@ -49,6 +49,7 @@ pipeline {
 
                     podTemplate(
                         label: 'k8s-deployer',
+                        serviceAccount: 'jenkins',
                         containers: [
                             containerTemplate(
                                 name: 'deploy',
