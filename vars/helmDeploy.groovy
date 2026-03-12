@@ -5,7 +5,7 @@ def call(Map cfg) {
     // Plugin (latest) expects: chartPath, repositories, releaseName, valuesFile (optional), additionalArgs, helmInstallation (optional)
     def chartPath = cfg.chartName?.contains('/') ? cfg.chartName : "${cfg.repoName}/${cfg.chartName}"
     def repos = [[name: cfg.repoName, url: cfg.repoUrl]]
-    def args = ["--namespace", cfg.namespace]
+    def args = ["--namespace", cfg.namespace, "--create-namespace"]
     if (cfg.version) {
         args.addAll(['--version', cfg.version])
     }
