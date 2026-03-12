@@ -36,13 +36,15 @@ def call(Map config = [:]) {
 
         echo "Deploying to cluster: ${clusterName}"
 
+        def state = [deployed: [] as Set, deploying: [] as Set]
+
         for (p in projects) {
 
             echo "---------------------------------------"
             echo "Deploying project: ${p}"
             echo "---------------------------------------"
 
-            deployProject(project: p, cluster: clusterName)
+            deployProject(project: p, cluster: clusterName, state: state)
         }
     }
 }

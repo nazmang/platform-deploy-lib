@@ -6,7 +6,8 @@ A Jenkins shared library for deploying Kubernetes workloads (Helm charts, raw ma
 
 - **Multi-environment**: Deploy to several clusters in parallel or to a single target (cloud, on-prem, etc.).
 - **Declarative pipeline**: Each project is driven by a `deploy.yaml` in its directory.
-- **Step types**: Helm, manifest (kubectl apply), Kustomize, and wait (e.g. for CRDs).
+- **Dependencies**: Optional `depends` list in `deploy.yaml` to deploy dependent projects first (with cycle detection).
+- **Step types**: Helm, manifest (kubectl apply), Kustomize, wait (e.g. for CRDs), and shell (run arbitrary commands).
 - **Environment-specific config**: Different Helm values or settings per environment.
 - **Conditional steps**: Run steps only in selected environments via `onlyEnvs`.
 - **Change detection**: Deploy only projects whose files changed (when not using `FORCE_DEPLOY` or `PROJECT`).
@@ -59,11 +60,12 @@ repository-root/
 
 ## deploy.yaml reference
 
-Top-level key:
+Top-level keys:
 
-| Key    | Required | Description |
+| Key       | Required | Description |
 |--------|----------|-------------|
 | `steps` | Yes     | List of step objects. Executed in order. |
+| `depends` | No    | List of project directory names to deploy **before** this project. Dependencies are deployed first (with their own dependencies resolved recursively); each project is deployed only once per cluster per run. Circular dependencies cause the pipeline to fail. |
 
 ### Step structure
 
@@ -71,7 +73,7 @@ Each step is an object with:
 
 | Key            | Required | Description |
 |----------------|----------|-------------|
-| `type`         | Yes      | One of: `helm`, `manifest`, `kustomize`, `wait`. |
+| `type`         | Yes      | One of: `helm`, `manifest`, `kustomize`, `wait`, `shell`. |
 | `config`       | Conditional | Single config used for all environments. Use when the step is the same everywhere. |
 | `environments` | Conditional | Map of environment name → `{ config: { ... } }`. Use when config differs per environment (e.g. different Helm values per cluster). Exactly one of `config` or `environments` must be provided for the environments where the step runs. |
 | `onlyEnvs`     | No       | List of environment names. If set, the step runs **only** for those environments; otherwise it runs for the current environment (subject to having a valid `config`). |
@@ -214,6 +216,38 @@ Waits for a resource to be ready (e.g. CRD established) before continuing.
 
 ---
 
+### shell
+
+Runs one or more shell commands in the project directory (same as other steps). Use for pre/post hooks, custom scripts, or any command that does not fit helm/manifest/kustomize/wait.
+
+**Config:**
+
+| Key         | Required | Description |
+|-------------|----------|-------------|
+| `command`   | Conditional | Single command string. Use when you have one command. |
+| `commands`  | Conditional | List of command strings. Each is run in order; the first failure fails the step. Exactly one of `command` or `commands` must be provided. |
+
+**Example (single command):**
+
+```yaml
+- type: shell
+  config:
+    command: "./scripts/pre-deploy.sh"
+```
+
+**Example (multiple commands):**
+
+```yaml
+- type: shell
+  config:
+    commands:
+      - "echo Building assets..."
+      - "./scripts/build.sh"
+      - "kubectl get nodes"
+```
+
+---
+
 ## Pipeline parameters
 
 The library expects these parameters (define them in your Jenkins job or Jenkinsfile):
@@ -243,6 +277,8 @@ Clusters are defined in `ClusterManager.groovy`:
 - **onprem**: credential `kubeconfig-onprem`, non-critical (failure is logged and skipped).
 
 The pipeline runs each target in a **deploy** container and injects the corresponding kubeconfig via `KUBECONFIG`. The library copies the credential into the workspace and sets `KUBECONFIG` to that path inside the container so that `kubectl` and `helm` (and any plugin that runs them) use the credential’s identity instead of the pod’s in-cluster ServiceAccount (e.g. `system:serviceaccount:jenkins:default`). To add or change clusters, edit the `clusterMap` in `src/com/nazmang/platform/ClusterManager.groovy` and ensure the credential IDs exist in Jenkins.
+
+**Pod ServiceAccount (same-cluster deploys):** If you deploy to the same cluster where Jenkins runs, you can avoid “forbidden” errors by giving the deploy pod a dedicated ServiceAccount with RBAC. In your `podTemplate`, set `serviceAccount: 'jenkins'` (see `Jenkinsfile.example`). Create a ServiceAccount `jenkins` in the Jenkins namespace and grant it the roles needed to create resources in target namespaces (e.g. `nfs-provisioner`). Then the pod runs as `system:serviceaccount:<namespace>:jenkins` and `kubectl`/`helm` use that identity when no `KUBECONFIG` is set or when the kubeconfig uses the in-cluster config. For **different** clusters you still need a kubeconfig credential.
 
 ---
 
@@ -279,6 +315,19 @@ If your pipeline runs on an agent that already has a `deploy` container and cred
 ---
 
 ## Full deploy.yaml example
+
+**With dependencies** (e.g. `project-b` deploys after `project-a`):
+
+```yaml
+# project-b/deploy.yaml
+depends:
+  - project-a
+steps:
+  - type: helm
+    ...
+```
+
+**Full example with steps:**
 
 ```yaml
 steps:
@@ -339,9 +388,10 @@ platform-deploy-lib/
 └── vars/
     ├── platformDeploy.groovy   # Entry point: project selection + executeOnTargets
     ├── platformProjectChoices.groovy  # Returns list of project dirs with deploy.yaml (for input/autofill)
-    ├── deployProject.groovy   # Load spec, run steps (helm/manifest/kustomize/wait)
+    ├── deployProject.groovy   # Load spec, run steps (helm/manifest/kustomize/wait/shell)
     ├── helmDeploy.groovy
     ├── manifestDeploy.groovy
     ├── kustomizeDeploy.groovy
-    └── waitDeploy.groovy
+    ├── waitDeploy.groovy
+    └── shellDeploy.groovy
 ```
