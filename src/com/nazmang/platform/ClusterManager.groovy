@@ -31,13 +31,20 @@ class ClusterManager {
                         steps.file(credentialsId: cfg.credential, variable: 'KUBECONFIG')
                     ]) {
 
-                        try {
+                        // Copy kubeconfig to workspace so it's visible inside the container and to
+                        // any child process (e.g. Helm Tool plugin); then force KUBECONFIG to that path.
+                        // Otherwise the container may use the in-cluster ServiceAccount (e.g. system:serviceaccount:jenkins:default).
+                        def kubeconfigInWorkspace = ".kubeconfig-deploy-${c}"
+                        steps.sh "cp \"\${KUBECONFIG}\" \"\${WORKSPACE}/${kubeconfigInWorkspace}\""
+                        steps.withEnv(["KUBECONFIG=${steps.env.WORKSPACE}/${kubeconfigInWorkspace}"]) {
 
-                            steps.sh "kubectl cluster-info"
+                            try {
 
-                            body(c)
+                                steps.sh "kubectl cluster-info"
 
-                        } catch (err) {
+                                body(c)
+
+                            } catch (err) {
 
                             def reason = err.message ?: err.toString()
                             if (cfg.critical) {
@@ -45,6 +52,7 @@ class ClusterManager {
                             } else {
                                 steps.echo("Deploy to ${c} failed (non-critical): ${reason}. Skipping.")
                             }
+                        }
                         }
                     }
                 }

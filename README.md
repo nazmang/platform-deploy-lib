@@ -242,7 +242,7 @@ Clusters are defined in `ClusterManager.groovy`:
 - **cloud**: credential `kubeconfig-hetzner`, critical (pipeline fails if this cluster fails).
 - **onprem**: credential `kubeconfig-onprem`, non-critical (failure is logged and skipped).
 
-The pipeline runs each target in a **deploy** container and injects the corresponding kubeconfig via `KUBECONFIG`. To add or change clusters, edit the `clusterMap` in `src/com/nazmang/platform/ClusterManager.groovy` and ensure the credential IDs exist in Jenkins.
+The pipeline runs each target in a **deploy** container and injects the corresponding kubeconfig via `KUBECONFIG`. The library copies the credential into the workspace and sets `KUBECONFIG` to that path inside the container so that `kubectl` and `helm` (and any plugin that runs them) use the credential’s identity instead of the pod’s in-cluster ServiceAccount (e.g. `system:serviceaccount:jenkins:default`). To add or change clusters, edit the `clusterMap` in `src/com/nazmang/platform/ClusterManager.groovy` and ensure the credential IDs exist in Jenkins.
 
 ---
 
