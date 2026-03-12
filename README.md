@@ -221,14 +221,16 @@ The library expects these parameters (define them in your Jenkins job or Jenkins
 |-----------------|-------------|
 | `CLUSTER`       | Target cluster name (e.g. `cloud`, `onprem`). Used when deploying to a single cluster. When `DEPLOY_TARGET=all`, the library uses the current parallel branch name instead. |
 | `DEPLOY_TARGET` | Set to `"all"` to deploy to all configured clusters in parallel. Otherwise deployment uses `CLUSTER` only. |
-| `PROJECT`       | Optional. If set, only this project (directory name) is deployed. |
+| `PROJECT`       | Optional. If set, only this project (directory name) is deployed. Can also be set at runtime via `env.PROJECT_SELECTED` (e.g. from an input step). |
 | `FORCE_DEPLOY`  | Optional. If set, all projects (all directories with a `deploy.yaml`) are deployed, ignoring change detection. |
 
 **Project selection (in order):**
 
-1. If `params.PROJECT` is non-empty → deploy only that project.
+1. If `env.PROJECT_SELECTED` or `params.PROJECT` is non-empty → deploy only that project.
 2. Else if `params.FORCE_DEPLOY` is set → deploy all projects.
 3. Else → deploy only projects with changes (from `currentBuild.changeSets`).
+
+**Autofill PROJECT from repo:** After checkout, you can show a dropdown of project dirs (those with `deploy.yaml`) using the library step `platformProjectChoices()`. It returns a list of directory names. Use it in an `input` step and set `env.PROJECT_SELECTED` to the result; `platformDeploy()` will use it. See `Jenkinsfile.example` for a full pipeline with `AUTOFILL_PROJECT` and the input stage.
 
 ---
 
@@ -331,10 +333,11 @@ platform-deploy-lib/
 ├── README.md
 ├── src/com/nazmang/platform/
 │   ├── ClusterManager.groovy   # Multi-cluster parallel execution, credentials
-│   ├── ProjectLoader.groovy    # Load deploy.yaml, discover project dirs
+│   ├── ProjectLoader.groovy    # Load deploy.yaml, discover project dirs (findProjectDirsWithDeployYaml)
 │   └── ChangeDetector.groovy  # Changed projects from SCM change sets
 └── vars/
     ├── platformDeploy.groovy   # Entry point: project selection + executeOnTargets
+    ├── platformProjectChoices.groovy  # Returns list of project dirs with deploy.yaml (for input/autofill)
     ├── deployProject.groovy   # Load spec, run steps (helm/manifest/kustomize/wait)
     ├── helmDeploy.groovy
     ├── manifestDeploy.groovy

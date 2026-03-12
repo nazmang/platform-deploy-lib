@@ -5,9 +5,11 @@ def call(Map config = [:]) {
     def projectLoader  = new com.nazmang.platform.ProjectLoader(this)
 
     def projects = []
+    // Allow override from runtime input (env.PROJECT_SELECTED) when set
+    def projectOverride = env.PROJECT_SELECTED?.trim() ?: params.PROJECT?.trim()
 
-    if (params.PROJECT?.trim()) {
-        projects = [params.PROJECT]
+    if (projectOverride) {
+        projects = [projectOverride]
     } else if (params.FORCE_DEPLOY) {
         projects = projectLoader.findAllProjects()
     } else {

@@ -23,4 +23,10 @@ class ProjectLoader {
 
         return dirs
     }
+
+    /** Returns only directory names that contain deploy.yaml (valid project dirs). */
+    def findProjectDirsWithDeployYaml() {
+        def dirs = findAllProjects()
+        return dirs.findAll { it?.trim() && steps.fileExists("${it}/deploy.yaml") }
+    }
 }
