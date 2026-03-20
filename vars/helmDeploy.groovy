@@ -9,13 +9,32 @@ def call(Map cfg) {
     if (cfg.version) {
         args.addAll(['--version', cfg.version])
     }
-    // valuesFile: single file (plugin default 'values.yaml'); for multiple files use -f in additionalArgs
-    def valuesFile = null
+    // Resolve Helm values files relative to the current pipeline directory (pwd()),
+    // then pass them via `-f` with quoting. This avoids "no such file" when nested
+    // deploys change the effective working directory inside the Helm plugin/container,
+    // and it also handles workspace paths that contain spaces.
     if (cfg.values) {
-        if (cfg.values.size() == 1) {
-            valuesFile = cfg.values[0]
-        } else {
-            cfg.values.each { v -> args.addAll(['-f', v]) }
+        def baseDir = pwd()
+        cfg.values.each { v ->
+            if (!v) return
+            def p = v.toString().trim()
+            if (!p) return
+            // If not absolute, resolve relative to the current working directory.
+            // If that file doesn't exist, fall back to repo root (${WORKSPACE})
+            // since some projects keep shared values under top-level `environments/...`.
+            if (!p.startsWith('/')) {
+                def resolved = new File(baseDir, p).path
+                if (!fileExists(resolved) && env.WORKSPACE) {
+                    def workspaceResolved = new File(env.WORKSPACE, p).path
+                    if (fileExists(workspaceResolved)) {
+                        resolved = workspaceResolved
+                    }
+                }
+                p = resolved
+            }
+            // Shell-quote for safe inclusion in the plugin's constructed command line.
+            def escaped = p.replace('"', '\\"')
+            args.addAll(['-f', "\"${escaped}\""])
         }
     }
     def additionalArgs = args.join(' ')
@@ -26,9 +45,6 @@ def call(Map cfg) {
         repositories: repos,
         additionalArgs: additionalArgs
     ]
-    if (valuesFile != null) {
-        stepArgs.valuesFile = valuesFile
-    }
     if (cfg.helmInstallation?.trim()) {
         stepArgs.helmInstallation = cfg.helmInstallation.trim()
     }
