@@ -73,6 +73,10 @@ def call(Map config) {
                     shellDeploy(stepConfig)
                     break
 
+                case 'decrypt-sops':
+                    decryptSopsDeploy(stepConfig)
+                    break
+
                 default:
                     error "Unknown step type: ${step.type}"
             }

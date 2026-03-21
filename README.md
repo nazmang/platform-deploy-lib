@@ -73,7 +73,7 @@ Each step is an object with:
 
 | Key            | Required | Description |
 |----------------|----------|-------------|
-| `type`         | Yes      | One of: `helm`, `manifest`, `kustomize`, `wait`, `shell`. |
+| `type`         | Yes      | One of: `helm`, `manifest`, `kustomize`, `wait`, `decrypt-sops`, `shell`. |
 | `config`       | Conditional | Single config used for all environments. Use when the step is the same everywhere. |
 | `environments` | Conditional | Map of environment name → `{ config: { ... } }`. Use when config differs per environment (e.g. different Helm values per cluster). Exactly one of `config` or `environments` must be provided for the environments where the step runs. |
 | `onlyEnvs`     | No       | List of environment names. If set, the step runs **only** for those environments; otherwise it runs for the current environment (subject to having a valid `config`). |
@@ -216,9 +216,32 @@ Waits for a resource to be ready (e.g. CRD established) before continuing.
 
 ---
 
+### decrypt-sops
+
+Decrypts one or more files in place using [SOPS](https://github.com/getsops/sops) (`sops --decrypt --in-place`). Place this step **before** `helm`, `manifest`, or `kustomize` steps that consume the cleartext files. The Jenkins agent must have `sops` on `PATH` and credentials configured for your backend (e.g. KMS, age, Vault).
+
+**Config:**
+
+| Key          | Required | Description |
+|--------------|----------|-------------|
+| `files`      | Yes      | List of file paths relative to the project directory. Each file is decrypted in place. |
+| `extraArgs`  | No       | Extra arguments passed to `sops` after `--decrypt --in-place` (string or list of strings). |
+
+**Example:**
+
+```yaml
+- type: decrypt-sops
+  config:
+    files:
+      - environments/cloud/values.secret.yaml
+      - secrets/app.yaml
+```
+
+---
+
 ### shell
 
-Runs one or more shell commands in the project directory (same as other steps). Use for pre/post hooks, custom scripts, or any command that does not fit helm/manifest/kustomize/wait.
+Runs one or more shell commands in the project directory (same as other steps). Use for pre/post hooks, custom scripts, or any command that does not fit helm/manifest/kustomize/wait/decrypt-sops.
 
 **Config:**
 
@@ -388,10 +411,11 @@ platform-deploy-lib/
 └── vars/
     ├── platformDeploy.groovy   # Entry point: project selection + executeOnTargets
     ├── platformProjectChoices.groovy  # Returns list of project dirs with deploy.yaml (for input/autofill)
-    ├── deployProject.groovy   # Load spec, run steps (helm/manifest/kustomize/wait/shell)
+    ├── deployProject.groovy   # Load spec, run steps (helm/manifest/kustomize/wait/decrypt-sops/shell)
     ├── helmDeploy.groovy
     ├── manifestDeploy.groovy
     ├── kustomizeDeploy.groovy
     ├── waitDeploy.groovy
+    ├── decryptSopsDeploy.groovy
     └── shellDeploy.groovy
 ```
