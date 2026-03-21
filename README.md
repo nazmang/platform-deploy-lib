@@ -218,7 +218,9 @@ Waits for a resource to be ready (e.g. CRD established) before continuing.
 
 ### decrypt-sops
 
-Decrypts one or more files in place using [SOPS](https://github.com/getsops/sops) (`sops --decrypt --in-place`). Place this step **before** `helm`, `manifest`, or `kustomize` steps that consume the cleartext files. The Jenkins agent must have `sops` on `PATH`.
+Decrypts one or more files in place using [SOPS](https://github.com/getsops/sops) (`sops --decrypt --in-place`). Place this step **before** `helm`, `manifest`, or `kustomize` steps that consume the cleartext files.
+
+**SOPS binary:** The library resolves the `sops` executable in this order: optional **`sopsBinary`** (absolute path in `deploy.yaml`); otherwise `command -v sops` on `PATH`; otherwise **`/usr/local/bin/sops`** if that path exists and is executable. If none apply, the step fails with a clear error.
 
 If you use **age** (or another backend that reads a key from the environment), supply the key with **`keyCredentialId`** or **`keyParameter`** (not both). If you omit both, no extra key env vars are set (for example AWS KMS with IAM, or keys already on the agent).
 
@@ -227,6 +229,7 @@ If you use **age** (or another backend that reads a key from the environment), s
 | Key                    | Required | Description |
 |------------------------|----------|-------------|
 | `files`                | Yes      | List of file paths relative to the project directory. Each file is decrypted in place. |
+| `sopsBinary`           | No       | Full path to the `sops` executable. If unset, the library autodetects (see above). |
 | `extraArgs`            | No       | Extra arguments passed to `sops` after `--decrypt --in-place` (string or list of strings). |
 | `keyCredentialId`      | No       | Jenkins credential ID. Use **Secret text** for the raw key (e.g. age private key) or **Secret file** when `keyCredentialIsFile` is true. Mutually exclusive with `keyParameter`. |
 | `keyParameter`         | No       | Name of a pipeline parameter (e.g. `SOPS_AGE_KEY`) whose value is used as the key. Mutually exclusive with `keyCredentialId`. |

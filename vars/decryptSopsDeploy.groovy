@@ -1,3 +1,32 @@
+/** Resolve path to sops: explicit sopsBinary, else PATH, else /usr/local/bin/sops if executable. */
+def resolveSopsBinary(Map cfg) {
+
+    def explicit = cfg.sopsBinary
+    if (explicit != null) {
+        def p = explicit.toString().trim()
+        if (!p) {
+            error "decrypt-sops config: 'sopsBinary' must not be empty when set"
+        }
+        if (sh(script: "test -x \"${p}\"", returnStatus: true) != 0) {
+            error "decrypt-sops: sopsBinary is not executable: ${p}"
+        }
+        return p
+    }
+
+    def fromPath = sh(script: 'command -v sops 2>/dev/null || true', returnStdout: true).trim()
+    if (fromPath) {
+        return fromPath
+    }
+
+    def fallback = '/usr/local/bin/sops'
+    if (sh(script: "test -x \"${fallback}\"", returnStatus: true) == 0) {
+        echo "decrypt-sops: 'sops' not in PATH; using ${fallback}"
+        return fallback
+    }
+
+    error "decrypt-sops: sops not found in PATH and not executable at ${fallback} (install sops, add it to PATH, or set sopsBinary in deploy.yaml)"
+}
+
 def call(Map cfg) {
 
     def files = cfg.files
@@ -10,6 +39,8 @@ def call(Map cfg) {
     if (files.isEmpty()) {
         error "decrypt-sops config: 'files' must not be empty"
     }
+
+    def sopsBin = resolveSopsBinary(cfg)
 
     def keyCred = cfg.keyCredentialId
     def keyParam = cfg.keyParameter
@@ -31,21 +62,23 @@ def call(Map cfg) {
         if (keyCheckCfg != null) {
             shellDeploy(keyCheckCfg)
         }
-        for (int i = 0; i < files.size(); i++) {
-            def f = files[i]
-            if (!(f instanceof String)) {
-                error "decrypt-sops config: 'files[${i}]' must be a string"
+        withEnv(["SOPS_BIN=${sopsBin}"]) {
+            for (int i = 0; i < files.size(); i++) {
+                def f = files[i]
+                if (!(f instanceof String)) {
+                    error "decrypt-sops config: 'files[${i}]' must be a string"
+                }
+                if (!fileExists(f)) {
+                    error "decrypt-sops: file not found: ${f}"
+                }
+                echo "SOPS decrypt (in-place): ${f}"
+                def cmd = "\$SOPS_BIN --decrypt --in-place"
+                if (extraArgs) {
+                    cmd += " ${extraArgs}"
+                }
+                cmd += " ${f}"
+                sh cmd
             }
-            if (!fileExists(f)) {
-                error "decrypt-sops: file not found: ${f}"
-            }
-            echo "SOPS decrypt (in-place): ${f}"
-            def cmd = "sops --decrypt --in-place"
-            if (extraArgs) {
-                cmd += " ${extraArgs}"
-            }
-            cmd += " ${f}"
-            sh cmd
         }
     }
 
