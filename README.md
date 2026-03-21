@@ -218,22 +218,43 @@ Waits for a resource to be ready (e.g. CRD established) before continuing.
 
 ### decrypt-sops
 
-Decrypts one or more files in place using [SOPS](https://github.com/getsops/sops) (`sops --decrypt --in-place`). Place this step **before** `helm`, `manifest`, or `kustomize` steps that consume the cleartext files. The Jenkins agent must have `sops` on `PATH` and credentials configured for your backend (e.g. KMS, age, Vault).
+Decrypts one or more files in place using [SOPS](https://github.com/getsops/sops) (`sops --decrypt --in-place`). Place this step **before** `helm`, `manifest`, or `kustomize` steps that consume the cleartext files. The Jenkins agent must have `sops` on `PATH`.
+
+If you use **age** (or another backend that reads a key from the environment), supply the key with **`keyCredentialId`** or **`keyParameter`** (not both). If you omit both, no extra key env vars are set (for example AWS KMS with IAM, or keys already on the agent).
 
 **Config:**
 
-| Key          | Required | Description |
-|--------------|----------|-------------|
-| `files`      | Yes      | List of file paths relative to the project directory. Each file is decrypted in place. |
-| `extraArgs`  | No       | Extra arguments passed to `sops` after `--decrypt --in-place` (string or list of strings). |
+| Key                    | Required | Description |
+|------------------------|----------|-------------|
+| `files`                | Yes      | List of file paths relative to the project directory. Each file is decrypted in place. |
+| `extraArgs`            | No       | Extra arguments passed to `sops` after `--decrypt --in-place` (string or list of strings). |
+| `keyCredentialId`      | No       | Jenkins credential ID. Use **Secret text** for the raw key (e.g. age private key) or **Secret file** when `keyCredentialIsFile` is true. Mutually exclusive with `keyParameter`. |
+| `keyParameter`         | No       | Name of a pipeline parameter (e.g. `SOPS_AGE_KEY`) whose value is used as the key. Mutually exclusive with `keyCredentialId`. |
+| `keyCredentialIsFile`  | No       | If `true`, `keyCredentialId` is bound as a **Secret file** and the path is exposed via `keyEnvVar` (default `SOPS_AGE_KEY_FILE`). If `false` (default), the credential is **Secret text** and the value is bound to `keyEnvVar` (default `SOPS_AGE_KEY`). |
+| `keyEnvVar`            | No       | Environment variable name SOPS should read (default `SOPS_AGE_KEY` for text/parameter, `SOPS_AGE_KEY_FILE` for file credential). Override for other backends (e.g. `SOPS_PGP_KEY`). |
+| `keyCheck`             | No       | Optional validation run **after** the key is available and **before** decrypting files. Same shape as a **`shell`** step: provide `command` (string) or `commands` (list). Use to verify the key (e.g. `age-keygen -y` on a file) or cloud identity before calling `sops`. |
 
-**Example:**
+**Example (key from credential):**
 
 ```yaml
 - type: decrypt-sops
   config:
+    keyCredentialId: sops-age-key
+    keyCheck:
+      command: 'test -n "$SOPS_AGE_KEY"'
     files:
       - environments/cloud/values.secret.yaml
+```
+
+**Example (key from pipeline parameter):**
+
+Define a parameter in your Jenkins job (e.g. `password` named `SOPS_AGE_KEY`), then:
+
+```yaml
+- type: decrypt-sops
+  config:
+    keyParameter: SOPS_AGE_KEY
+    files:
       - secrets/app.yaml
 ```
 
@@ -281,6 +302,8 @@ The library expects these parameters (define them in your Jenkins job or Jenkins
 | `DEPLOY_TARGET` | Set to `"all"` to deploy to all configured clusters in parallel. Otherwise deployment uses `CLUSTER` only. |
 | `PROJECT`       | Optional. If set, only this project (directory name) is deployed. Can also be set at runtime via `env.PROJECT_SELECTED` (e.g. from an input step). |
 | `FORCE_DEPLOY`  | Optional. If set, all projects (all directories with a `deploy.yaml`) are deployed, ignoring change detection. |
+
+If a `decrypt-sops` step uses **`keyParameter`**, add a matching pipeline parameter (e.g. `password` or `string`) with that name so the key can be supplied at build time.
 
 **Project selection (in order):**
 

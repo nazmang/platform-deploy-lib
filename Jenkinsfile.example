@@ -16,6 +16,8 @@ pipeline {
         choice(name: 'CLUSTER', choices: ['cloud','onprem'])
         booleanParam(name: 'AUTOFILL_PROJECT', defaultValue: true, description: 'After checkout, show dropdown of projects (dirs with deploy.yaml) to choose from')
         booleanParam(name: 'SKIP_PROJECT_INPUT', defaultValue: true, description: 'Skip project selection; deploy only changed projects (or all if FORCE_DEPLOY)')
+        // Optional: if deploy.yaml uses decrypt-sops with keyParameter: SOPS_AGE_KEY
+        // password(name: 'SOPS_AGE_KEY', defaultValue: '', description: 'SOPS age key (optional)')
     }
 
     stages {
