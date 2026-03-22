@@ -142,8 +142,11 @@ Applies a Kubernetes manifest with `kubectl apply -f`.
 
 | Key         | Required | Description |
 |-------------|----------|-------------|
-| `file`      | Yes      | Path to YAML manifest (relative to project dir). |
+| `file`      | Conditional | Single path (string), or a **list** of paths. Use when you prefer one key. Mutually exclusive with `files`. |
+| `files`     | Conditional | List of paths (relative to project dir). Use for multiple manifests in one `kubectl apply`. Mutually exclusive with `file`. |
 | `namespace` | No       | If set, passed as `-n <namespace>` to `kubectl apply`. |
+
+Exactly one of `file` or `files` must be set.
 
 **Example:**
 
@@ -152,6 +155,25 @@ Applies a Kubernetes manifest with `kubectl apply -f`.
   config:
     file: metallb-config.yaml
     namespace: metallb-system
+```
+
+**Example (multiple files via `files`):**
+
+```yaml
+- type: manifest
+  config:
+    files:
+      - environments/overlays/cloud/certmanager-config.yaml
+      - environments/overlays/cloud/extra.yaml
+```
+
+A **list** under `file` is also allowed (same as `files`); useful when a single-item list comes from YAML:
+
+```yaml
+- type: manifest
+  config:
+    file:
+      - environments/overlays/cloud/certmanager-config.yaml
 ```
 
 **Example (only in one environment):**
