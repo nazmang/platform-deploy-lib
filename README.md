@@ -94,9 +94,9 @@ Deploys a Helm chart using the [Helm Tool Plugin](https://github.com/nazmang/hel
 
 | Key               | Required | Description |
 |-------------------|----------|-------------|
-| `repoName`        | Yes      | Helm repo name. |
-| `repoUrl`         | Yes      | Helm repo URL. |
-| `chartName`       | Yes      | Chart name (e.g. `repoName/chart-name` or `repo/chart`). |
+| `repoName`        | Yes (classic repo) | Helm repo name. Not used for OCI. |
+| `repoUrl`         | Yes      | Helm repo URL, or an OCI registry path starting with `oci://` (see below). |
+| `chartName`       | Yes      | Chart name (e.g. `repoName/chart-name` or `repo/chart`). For OCI: the bare chart name. |
 | `releaseName`     | Yes      | Helm release name. |
 | `namespace`       | Yes      | Target namespace. |
 | `version`         | No       | Chart version. |
@@ -130,6 +130,26 @@ Deploys a Helm chart using the [Helm Tool Plugin](https://github.com/nazmang/hel
         values:
           - values-common.yaml
           - environments/onprem/values.yaml
+```
+
+**OCI charts.** When `repoUrl` starts with `oci://`, nothing is added with
+`helm repo add` (OCI registries do not support it): the library passes an empty
+repository list and `chartPath = <repoUrl>/<chartName>`, and the plugin runs
+`helm upgrade --install` against the OCI reference directly. Needs Helm ≥ 3.8 in
+the Helm installation the plugin uses.
+
+```yaml
+- type: helm
+  environments:
+    cloud:
+      config:
+        repoUrl: oci://ghcr.io/sergelogvinov/charts
+        chartName: proxmox-csi-plugin
+        version: 0.5.12
+        releaseName: proxmox-csi
+        namespace: csi-proxmox
+        values:
+          - environments/cloud/values.yaml
 ```
 
 ---
@@ -295,6 +315,11 @@ Runs one or more shell commands in the project directory (same as other steps). 
 |-------------|----------|-------------|
 | `command`   | Conditional | Single command string. Use when you have one command. |
 | `commands`  | Conditional | List of command strings. Each is run in order; the first failure fails the step. Exactly one of `command` or `commands` must be provided. |
+
+`deploy.yaml` is read by a minimal parser **without block scalars** — write each
+command on one line. A folded `command: >-` would arrive as the literal string
+`>-`; the step now fails on an empty command or a bare `|`/`>` indicator instead
+of running an empty script and passing.
 
 **Example (single command):**
 
