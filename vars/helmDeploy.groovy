@@ -3,8 +3,23 @@ def call(Map cfg) {
     echo "Deploying Helm chart: ${cfg.chartName}"
 
     // Plugin (latest) expects: chartPath, repositories, releaseName, valuesFile (optional), additionalArgs, helmInstallation (optional)
-    def chartPath = cfg.chartName?.contains('/') ? cfg.chartName : "${cfg.repoName}/${cfg.chartName}"
-    def repos = [[name: cfg.repoName, url: cfg.repoUrl]]
+    def chartPath
+    def repos
+    def repoUrl = cfg.repoUrl?.toString()?.trim()
+    if (repoUrl?.startsWith('oci://')) {
+        // OCI registries cannot be added with `helm repo add`. With an empty
+        // repository list the plugin skips repo add/update and runs
+        // `helm upgrade --install <release> <chartPath>` directly.
+        if (!cfg.chartName?.toString()?.trim()) {
+            error "helm config: 'chartName' is required for an OCI repoUrl"
+        }
+        def name = cfg.chartName.toString().trim()
+        chartPath = name.startsWith('oci://') ? name : "${repoUrl.replaceAll('/+$', '')}/${name.tokenize('/').last()}"
+        repos = []
+    } else {
+        chartPath = cfg.chartName?.contains('/') ? cfg.chartName : "${cfg.repoName}/${cfg.chartName}"
+        repos = [[name: cfg.repoName, url: cfg.repoUrl]]
+    }
     def args = ["--namespace", cfg.namespace, "--create-namespace"]
     if (cfg.version) {
         args.addAll(['--version', cfg.version])
